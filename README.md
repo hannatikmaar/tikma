@@ -1,0 +1,2 @@
+# tikma
+minun ensimmäinen kerta
