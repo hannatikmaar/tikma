@@ -1,0 +1,76 @@
+name: CI build 1 - (Windows)
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  pull_request:
+    branches:
+  workflow_dispatch:
+    branches:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    env:
+      PY_COLORS: "1"
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        os: [windows-latest]
+        python-version: ["3.12"]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    # Windows uses UTF-8 by default, so no need for locale setting
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade pip
+        pip install --upgrade wheel
+        pip install --upgrade seleniumbase
+        pip install --upgrade pyautogui
+      shell: cmd
+    # Chrome is typically pre-installed on Windows runners
+    - name: Check the console scripts interface
+      run: |
+        seleniumbase
+        sbase
+      shell: cmd
+    - name: Install chromedriver
+      run: |
+        seleniumbase install chromedriver
+      shell: cmd
+    - name: Install Cloudflare WARP
+      run: |
+        # Download WARP installer
+        Invoke-WebRequest -Uri "https://1111-releases.cloudflareclient.com/windows/Cloudflare_WARP_Release-x64.msi" -OutFile "WARP.msi"
+        
+        # Install WARP silently
+        Start-Process msiexec.exe -ArgumentList '/i WARP.msi /quiet /norestart' -Wait
+        
+        # Wait for the service to start
+        Start-Sleep -Seconds 10
+        
+        # Register and connect using WARP CLI
+        & 'C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe' --accept-tos registration new
+        & 'C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe' --accept-tos connect
+        & 'C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe' --accept-tos status
+      shell: powershell
+    - name: Run python hana.py --debug
+      run: |
+        python hana.py --screenshot
+      shell: cmd
+    - name: Upload screenshots
+      uses: actions/upload-artifact@v4
+      with:
+        name: seleniumbase-screenshots
+        path: |
+          ./latest_logs/
